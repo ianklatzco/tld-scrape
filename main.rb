@@ -1,3 +1,5 @@
+# fair warning: this is awful code: i wrote it to learn some ruby.
+
 require 'telegram/bot'
 require 'open-uri'
 require 'net/http'
@@ -6,43 +8,56 @@ require 'diffy'
 $url = "http://data.iana.org/TLD/tlds-alpha-by-domain.txt"
 $stored = nil
 
-# class WebhooksController < Telegram::Bot::UpdatesController
-#   def start!(*)
-# 
-#     respond_with :message, text: 'Hello!'
-# 	response = Net::HTTP.get_response(URI.parse($url)) # => #<Net::HTTPOK 200 OK readbody=true>
-# 	response = response.body
-# 	diff_result = Diffy::Diff.new($stored, response)
-# 
-# 	# first run
-# 	if $stored == nil
-# 		$stored = response
-# 		printable = response.slice(0,100)
-# 		respond_with :message, text: "first run, fetched: #{printable}"
-# 		return
-# 	end
-# 
-# 	if diff_result != nil
-# 		respond_with :message, text: diff_result
-# 	end
-#   end
-# end
-
-fname = "creds.txt"
-somefile = File.open(fname, "r")
+# authenticate
+creds_name = "creds.txt"
+somefile = File.open(creds_name, "r")
 TOKEN = somefile.read.strip
 somefile.close
 
-Telegram::Bot::Client.run(TOKEN) do |bot|
-  bot.listen do |message|
-    case message.text
-    when '/start'
-      bot.api.send_message(chat_id: message.chat.id, text: "Hello, #{message.from.first_name}")
-    when '/stop'
-      bot.api.send_message(chat_id: message.chat.id, text: "Bye, #{message.from.first_name}")
-    end
-  end
+# open the last read
+$fname = "last.txt"
+handle = File.open($fname, "r")
+$stored = handle.read
+handle.close
+
+def send_thing()
+	response = Net::HTTP.get_response(URI.parse($url))
+	response = response.body
+	diff_result = Diffy::Diff.new($stored, response, :context => 0)
+
+	# if the file was empty, write the response
+	if $stored == ''
+		puts "file was empty, writing"
+		handle = File.open($fname, "w")
+		handle.write(response)
+		handle.close
+		printable = response.slice(0,1900)
+		return printable
+	end
+
+	# puts "file was not empty"
+	if diff_result.to_s != ''
+		puts "diff was different, writing"
+		handle = File.open($fname, "w")
+		handle.write(response)
+		handle.close
+		return diff_result.to_s.slice(0,1900)
+	end
+
+	return ''
 end
 
-# poller.start
+require 'logger'
+logger = Logger.new(STDOUT)
 
+Telegram::Bot::Client.run(TOKEN) do |bot|
+	my_id = 157625604
+	foo = send_thing()
+	sendend = lambda { |x="hello world"|
+		# i feel like i'm writing INCREDIBLY shitty haskell
+		if x == '' or nil ; return ; end
+		bot.api.send_message(chat_id: my_id, text: x)
+	}
+
+	sendend.call(foo)
+end
